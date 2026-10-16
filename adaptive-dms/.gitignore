@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tmp/
+
+# Datasets, model weights, and per-owner biometric artifacts never enter Git.
+/data/
+/datasets/
+/artifacts/
+/checkpoints/
+/weights/
+*.pt
+*.pth
+*.onnx
+*.keras
+*.h5
+*.task
+*.npz
+*.mp4
+
+# Local secrets and deployment configuration.
+.env
+.env.*
+!.env.example

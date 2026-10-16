@@ -1,0 +1,12 @@
+{
+  "dataset_root": "D:/Datasets/DMD/partial",
+  "source": "https://dmd.vicomtech.org/",
+  "subjects": [1, 36],
+  "applications": ["drowsiness", "distraction"],
+  "scenario": "real_car",
+  "modality": "rgb",
+  "camera": "face",
+  "include_annotations": true,
+  "maximum_download_gb": 8,
+  "purpose": "competition_pipeline_smoke_test"
+}
