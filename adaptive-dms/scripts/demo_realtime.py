@@ -1,14 +1,17 @@
 """Real-time DMS demo: webcam or DMD video -> MediaPipe (once per frame)
 -> BlazeGaze + 4-driver DMD adapter (gaze zone) and 16x16 eye crops + EAR/blendshapes
 -> causal sliding windows -> driver state overlay.
+With --hands: MediaPipe hand landmarks on the same frame -> wheel geometry -> hands-off alert.
 
-Keys: q = quit, space = pause, r = reset windows.
+Keys: q = quit, space = pause, r = reset windows, w = re-fit the wheel (--hands);
+with --hands, two clicks (wheel centre, then rim) place the wheel by hand.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import json
 import time
 from collections import deque
 from pathlib import Path
@@ -33,7 +36,17 @@ from adaptive_dms.dms import (
 )
 from adaptive_dms.dms.blazegaze import rotation_matrix_to_euler_angles
 from adaptive_dms.gaze_calibration import GazeCalibrator, load_profile
+from adaptive_dms.hands import (
+    HandsConfig,
+    HandsMonitor,
+    Wheel,
+    WheelCalibrator,
+    draw_hands,
+    hands_from_result,
+)
 from adaptive_dms.realtime import DriverMonitor, FrameSignals, MonitorConfig, eye_crops
+
+WINDOW = "Adaptive DMS demo"
 
 # 0 on_road, 1 mirror_check, 2 distracted (same grouping as training).
 ZONE_TO_ATTENTION = (1, 2, 0, 1, 0, 1, 2, 2, 2)
@@ -84,6 +97,22 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--save", type=Path, default=None, help="write annotated mp4")
     parser.add_argument("--log-csv", type=Path, default=None, help="per-frame signals/state")
     parser.add_argument("--save-crops", type=Path, default=None, help="npz of 16x16 eye crops")
+    parser.add_argument("--hands", action="store_true", help="hands-on-wheel branch")
+    parser.add_argument(
+        "--hand-task", type=Path, default=Path("weights/hand_landmarker.task")
+    )
+    parser.add_argument(
+        "--driver-left-on-image-left", action="store_true",
+        help="camera behind the driver (DMD hands camera); default is a webcam facing them",
+    )
+    parser.add_argument(
+        "--hands-events", type=Path, default=None, help="json of hands-off TemporalEvents"
+    )
+    parser.add_argument(
+        "--wheel-radius-range", type=float, nargs=2, default=None, metavar=("MIN", "MAX"),
+        help="auto-fit the wheel at start-up with this radius range (fraction of frame "
+        "height; DMD hands camera: 0.28 0.40). Default: click centre, then rim",
+    )
     return parser.parse_args()
 
 
@@ -270,12 +299,36 @@ def main() -> None:
         num_faces=1,
     )
 
+    hand_detector = None
+    hands_config = HandsConfig(driver_left_on_image_left=args.driver_left_on_image_left)
+    hands_monitor = HandsMonitor(hands_config)
+    calibrator = WheelCalibrator(radius_range=tuple(args.wheel_radius_range or (0.28, 0.40)))
+    wheel: Wheel | None = None
+    clicks: list[tuple[int, int]] = []
+    if args.hands:
+        if not args.hand_task.exists():
+            raise SystemExit(f"--hands needs {args.hand_task} (MediaPipe hand_landmarker.task)")
+        hand_detector = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+            base_options=python.BaseOptions(model_asset_path=str(args.hand_task)),
+            running_mode=vision.RunningMode.VIDEO,
+            num_hands=2,
+            min_hand_detection_confidence=0.3,
+            min_tracking_confidence=0.3,
+        ))
+        if not args.no_display:
+            cv2.namedWindow(WINDOW)
+            cv2.setMouseCallback(
+                WINDOW, lambda event, x, y, *_: clicks.append((x, y))
+                if event == cv2.EVENT_LBUTTONDOWN else None,
+            )
+
     writer = None
     csv_file = open(args.log_csv, "w", newline="", encoding="utf-8") if args.log_csv else None
     csv_writer = csv.writer(csv_file) if csv_file else None
     if csv_writer:
         csv_writer.writerow(["t", "face", "ear", "blink", "cnn", "jaw", "yaw", "zone", "closed",
-                             "perclos", "closure_s", "yawn_s", "off_road", "state"])
+                             "perclos", "closure_s", "yawn_s", "off_road", "state"]
+                            + (["hands_state", "hands_off_s"] if args.hands else []))
     saved_crops: list[np.ndarray] = []
     saved_t: list[float] = []
 
@@ -305,9 +358,22 @@ def main() -> None:
             frame_index += 1
             h, w = frame.shape[:2]
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = detector.detect_for_video(
-                mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb), int(t * 1000)
-            )
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+            result = detector.detect_for_video(image, int(t * 1000))
+
+            hands, hands_out = [], None
+            if hand_detector is not None:
+                if frame_index == 1 and args.wheel_radius_range:
+                    calibrator.start(t)  # auto-fit once at start-up
+                fitted = calibrator.push(t, frame)
+                if len(clicks) >= 2:
+                    fitted, clicks[:] = Wheel.from_points(clicks[0], clicks[1]), []
+                if fitted is not None:
+                    wheel = fitted
+                    hands_monitor.reset()
+                hands = hands_from_result(hand_detector.detect_for_video(image, int(t * 1000)),
+                                          w, h)
+                hands_out = hands_monitor.update(t, hands, wheel)
 
             pts_px = None
             crops = None
@@ -372,7 +438,7 @@ def main() -> None:
                     f"{signals.head_yaw or 0:.1f}", GAZE_ZONES[zone] if zone is not None else "",
                     int(out.eye_closed), f"{out.perclos:.3f}", f"{out.closure_seconds:.2f}",
                     f"{out.yawning_seconds:.2f}", f"{out.off_road_ratio:.2f}", out.state,
-                ])
+                ] + ([hands_out.state, f"{hands_out.hands_off_seconds:.2f}"] if hands_out else []))
             if t - last_log >= 1.0:
                 last_log = t
                 print(
@@ -382,12 +448,18 @@ def main() -> None:
                     f"perclos={out.perclos:.2f} longest={out.longest_closure:.1f}s "
                     f"jaw={signals.jaw_open or 0:.2f} yawns={out.yawns_recent} "
                     f"zone={GAZE_ZONES[zone] if zone is not None else '-'} "
-                    f"offroad={out.off_road_ratio:.2f} fps={fps:.1f}",
+                    f"offroad={out.off_road_ratio:.2f} fps={fps:.1f}"
+                    + (f" hands={hands_out.state}" if hands_out else ""),
                     flush=True,
                 )
 
             draw_overlay(frame, out, signals, crops, zone,
                          gaze.confidence if gaze else 0.0, fps, pts_px)
+            if hands_out is not None:
+                draw_hands(frame, wheel, hands, hands_out, hands_config,
+                           calibrator.progress(t) if calibrator.active else None)
+                if clicks:
+                    cv2.circle(frame, clicks[0], 6, (0, 255, 255), -1)
             if args.save:
                 if writer is None:
                     args.save.parent.mkdir(parents=True, exist_ok=True)
@@ -395,7 +467,7 @@ def main() -> None:
                                              native_fps, (w, h))
                 writer.write(frame)
             if not args.no_display:
-                cv2.imshow("Adaptive DMS demo", frame)
+                cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
@@ -403,10 +475,23 @@ def main() -> None:
                     paused = True
                 if key == ord("r"):
                     monitor.reset()
+                    hands_monitor.reset()
                     if gaze:
                         gaze.reset()
+                if key == ord("w") and hand_detector is not None:
+                    wheel = None
+                    calibrator.start(t)
 
     capture.release()
+    if hand_detector is not None:
+        hand_detector.close()
+        events = hands_monitor.finish()
+        print(f"hands-off events: {len(events)}", flush=True)
+        if args.hands_events:
+            args.hands_events.parent.mkdir(parents=True, exist_ok=True)
+            args.hands_events.write_text(json.dumps(
+                [{"label": e.label, "start_s": e.start_s, "end_s": e.end_s,
+                  "confirmed_s": e.confirmed_s} for e in events], indent=2))
     if writer:
         writer.release()
     if csv_file:

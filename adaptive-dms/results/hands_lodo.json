@@ -1,0 +1,130 @@
+{
+  "protocol": "Evaluate the live hands-on-wheel branch (src/adaptive_dms/hands.py) on DMD.",
+  "summary": {
+    "macro_f1_mean": 0.535815231727918,
+    "macro_f1_min": 0.2792182498050372,
+    "hands_off_recall_mean": 0.922188902584946,
+    "hands_off_recall_min": 0.8573825503355704,
+    "events_hit": "18/19",
+    "false_alarms": 31,
+    "false_hands_off_seconds": 68.01075268816771,
+    "minutes": 12.826500896057347,
+    "onset_delay_s_median": 0.2688172043010866
+  },
+  "per_driver": [
+    {
+      "driver": "gA_1",
+      "config": {
+        "rim_radii": 1.1,
+        "min_score": 0.3,
+        "switch_s": 0.17
+      },
+      "macro_f1": 0.2792182498050372,
+      "per_class_f1": {
+        "both_hands": 0.1280353200883002,
+        "only_right": 0.12531328320802004,
+        "only_left": 0.26697412246989494,
+        "hands_off": 0.5965502734539335
+      },
+      "hands_off_recall": 0.9620081411126187,
+      "false_hands_off_seconds": 31.283602150535643,
+      "events": {
+        "gt_events": 5,
+        "hit": 5,
+        "false_alarms": 11,
+        "onset_delays_s": [
+          0.10080645161291102,
+          0.20161290322580783,
+          0.16801075268818977,
+          0.23521505376342589,
+          0.2352150537634543
+        ]
+      }
+    },
+    {
+      "driver": "gA_5",
+      "config": {
+        "rim_radii": 1.2,
+        "min_score": 0.3,
+        "switch_s": 0.17
+      },
+      "macro_f1": 0.48008098859347936,
+      "per_class_f1": {
+        "both_hands": 0.8875833597967608,
+        "only_right": 0.20630081300813008,
+        "only_left": 0.2785388127853881,
+        "hands_off": 0.5479009687836384
+      },
+      "hands_off_recall": 0.9024822695035462,
+      "false_hands_off_seconds": 26.37768817204133,
+      "events": {
+        "gt_events": 4,
+        "hit": 4,
+        "false_alarms": 12,
+        "onset_delays_s": [
+          0.2688172043010866,
+          0.20161290322579362,
+          0.4368279569892479,
+          0.4368279569892195
+        ]
+      }
+    },
+    {
+      "driver": "gB_6",
+      "config": {
+        "rim_radii": 1.2,
+        "min_score": 0.3,
+        "switch_s": 0.17
+      },
+      "macro_f1": 0.7258666177707864,
+      "per_class_f1": {
+        "both_hands": 0.8063081277800243,
+        "only_right": 0.5698689956331878,
+        "only_left": 0.5941644562334217,
+        "hands_off": 0.9331248914365121
+      },
+      "hands_off_recall": 0.9668826493880489,
+      "false_hands_off_seconds": 9.845430107526255,
+      "events": {
+        "gt_events": 5,
+        "hit": 5,
+        "false_alarms": 8,
+        "onset_delays_s": [
+          0.0,
+          0.2688172043010866,
+          0.2688172043010866,
+          0.16801075268816135,
+          0.4704301075268802
+        ]
+      }
+    },
+    {
+      "driver": "gB_7",
+      "config": {
+        "rim_radii": 1.2,
+        "min_score": 0.3,
+        "switch_s": 0.27
+      },
+      "macro_f1": 0.6580950707423692,
+      "per_class_f1": {
+        "both_hands": 0.43827022182388525,
+        "only_right": 0.8487626031164069,
+        "only_left": 0.4344740177439797,
+        "hands_off": 0.910873440285205
+      },
+      "hands_off_recall": 0.8573825503355704,
+      "false_hands_off_seconds": 0.504032258064484,
+      "events": {
+        "gt_events": 5,
+        "hit": 4,
+        "false_alarms": 0,
+        "onset_delays_s": [
+          0.4368279569892479,
+          0.3696236559139834,
+          0.4368279569892479,
+          0.3696236559139834
+        ]
+      }
+    }
+  ]
+}

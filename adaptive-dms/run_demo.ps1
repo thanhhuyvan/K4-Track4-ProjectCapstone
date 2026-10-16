@@ -8,12 +8,14 @@
   .\run_demo.ps1 -Calibrate               # redo the 80 s guided gaze calibration
   .\run_demo.ps1 -NoGaze                  # eyes / yawn / head pose only
   .\run_demo.ps1 -Source clip.mp4 -Save out.mp4 -NoDisplay
+  .\run_demo.ps1 -NoGaze -Hands           # + hands-on-wheel: click wheel centre, then rim
 #>
 param(
     [string]$Source = "0",
     [switch]$Calibrate,
     [string]$Profile = "weights/gaze_profile.npz",
     [switch]$NoGaze,
+    [switch]$Hands,
     [switch]$NoDisplay,
     [string]$Save = "",
     [string[]]$Extra = @()
@@ -24,7 +26,9 @@ Set-Location $PSScriptRoot
 $env:PYTHONPATH = "src;scripts"
 $python = if (Test-Path ".venv\Scripts\python.exe") { ".venv\Scripts\python.exe" } else { "python" }
 
-$required = @("weights/face_landmarker_v2_with_blendshapes.task", "weights/blazegaze_mpiifacegaze.keras")
+$required = @("weights/face_landmarker_v2_with_blendshapes.task")
+if (-not $NoGaze) { $required += "weights/blazegaze_mpiifacegaze.keras" }
+if ($Hands) { $required += "weights/hand_landmarker.task" }
 $missing = $required | Where-Object { -not (Test-Path $_) }
 if ($missing) {
     Write-Host "Missing model files (see README, 'Weights'):" -ForegroundColor Red
@@ -47,6 +51,7 @@ if (-not $NoGaze -and ($Calibrate -or (-not (Test-Path $Profile) -and -not $have
 $demoArgs = @("scripts/demo_realtime.py", "--source", $Source)
 if ($NoGaze) { $demoArgs += "--no-gaze" }
 elseif (Test-Path $Profile) { $demoArgs += @("--gaze-profile", $Profile) }
+if ($Hands) { $demoArgs += "--hands" }
 if ($NoDisplay) { $demoArgs += "--no-display" }
 if ($Save) { $demoArgs += @("--save", $Save) }
 Write-Host "Running demo (q quit, space pause, r reset)" -ForegroundColor Cyan
